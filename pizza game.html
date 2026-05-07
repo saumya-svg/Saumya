@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pizza Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --crust: #D4894A;
+    --sauce: #C0392B;
+    --cheese: #F5C842;
+    --bg: #FFF8F0;
+    --panel: #FFFFFF;
+    --text: #2C1A0E;
+    --muted: #9A7B60;
+    --accent: #E74C3C;
+    --green: #27AE60;
+    --shadow: 0 4px 24px rgba(44,26,14,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+  }
+  h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.4rem;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .tagline { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+ 
+  .game-layout {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    max-width: 900px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+ 
+  /* Pizza canvas */
+  .pizza-wrap {
+    position: relative;
+    width: 320px;
+    height: 320px;
+    flex-shrink: 0;
+  }
+  #pizza-canvas {
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    position: relative;
+    cursor: crosshair;
+    user-select: none;
+  }
+  #pizza-canvas svg { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .drop-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    color: rgba(160,120,80,0.5);
+    pointer-events: none;
+    text-align: center;
+    line-height: 1.5;
+    font-weight: 600;
+  }
+  .drop-hint.hidden { display: none; }
+ 
+  /* Topping panel */
+  .side-panel {
+    flex: 1;
+    min-width: 220px;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .panel-card {
+    background: var(--panel);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .panel-title {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .toppings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .topping-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 8px 4px;
+    cursor: grab;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 700;
+    transition: border-color 0.15s, transform 0.1s, background 0.15s;
+    user-select: none;
+  }
+  .topping-btn:hover { border-color: var(--accent); background: #FFF0EC; transform: scale(1.05); }
+  .topping-btn:active { transform: scale(0.97); cursor: grabbing; }
+  .topping-btn .emoji { font-size: 26px; }
+  .topping-btn.dragging { opacity: 0.5; }
+ 
+  /* Controls */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.15s;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-secondary { background: var(--bg); color: var(--text); border: 2px solid #E8D5C4; }
+  .btn-green { background: var(--green); color: white; }
+ 
+  /* Score / feedback */
+  .score-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .score-num {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.6rem;
+    color: var(--accent);
+  }
+  #feedback-box {
+    min-height: 48px;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.5;
+    background: #FFF8F0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    border: 1.5px solid #F0DCC8;
+  }
+  .loading-dots::after {
+    content: '';
+    animation: dots 1.2s steps(3,end) infinite;
+  }
+  @keyframes dots {
+    0%   { content: '.'; }
+    33%  { content: '..'; }
+    66%  { content: '...'; }
+    100% { content: ''; }
+  }
+ 
+  /* Topping placed on pizza */
+  .placed-topping {
+    position: absolute;
+    font-size: 22px;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: pop 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    user-select: none;
+  }
+  @keyframes pop {
+    from { transform: translate(-50%,-50%) scale(0.3); opacity: 0; }
+    to   { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+  }
+ 
+  /* Mode badge */
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #FFF0EC;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1.5px solid #F5C3B8;
+  }
+ 
+  /* Timer */
+  #timer-display {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.4rem;
+    color: var(--accent);
+  }
+  #timer-display.urgent { color: #E74C3C; animation: pulse 0.5s infinite alternate; }
+  @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
+ 
+  /* Overlay */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(44,26,14,0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .overlay.hidden { display: none; }
+  .overlay-card {
+    background: white;
+    border-radius: 24px;
+    padding: 32px 36px;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 16px 48px rgba(44,26,14,0.25);
+  }
+  .overlay-card h2 { font-family: 'Fredoka One', cursive; font-size: 2rem; color: var(--accent); margin-bottom: 8px; }
+  .overlay-card p { font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+  .overlay-score { font-family: 'Fredoka One', cursive; font-size: 3rem; color: var(--green); margin: 8px 0; }
+  .star-row { font-size: 28px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+ 
+<h1>🍕 Pizza Studio</h1>
+<p class="tagline">Drag toppings, build your masterpiece, get AI feedback</p>
+ 
+<div class="game-layout">
+ 
+  <!-- Pizza canvas -->
+  <div>
+    <div class="pizza-wrap" id="pizza-wrap">
+      <div id="pizza-canvas">
+        <!-- SVG base layers -->
+        <svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" width="320" height="320">
+          <!-- Crust -->
+          <circle cx="160" cy="160" r="158" fill="#D4894A"/>
+          <!-- Sauce -->
+          <circle cx="160" cy="160" r="138" fill="#C0392B"/>
+          <!-- Cheese base -->
+          <circle cx="160" cy="160" r="128" fill="#F5C842" opacity="0.85"/>
+          <!-- Cheese texture blobs -->
+          <ellipse cx="130" cy="140" rx="30" ry="22" fill="#F0B800" opacity="0.4"/>
+          <ellipse cx="190" cy="170" rx="28" ry="18" fill="#F0B800" opacity="0.35"/>
+          <ellipse cx="155" cy="195" rx="22" ry="16" fill="#E8AB00" opacity="0.3"/>
+          <ellipse cx="170" cy="125" rx="18" ry="14" fill="#F0B800" opacity="0.3"/>
+          <!-- Crust highlight ring -->
+          <circle cx="160" cy="160" r="138" fill="none" stroke="#B5732A" stroke-width="3" opacity="0.35"/>
+        </svg>
+        <!-- Placed toppings go here as absolute children -->
+        <div class="drop-hint" id="drop-hint">Drop toppings<br>here!</div>
+      </div>
+    </div>
+    <div style="text-align:center; margin-top: 10px; font-size: 12px; color: var(--muted); font-weight: 600;">
+      Drag toppings from the panel → drop on pizza
+    </div>
+  </div>
+ 
+  <!-- Side panel -->
+  <div class="side-panel">
+ 
+    <!-- Score / mode -->
+    <div class="panel-card">
+      <div class="score-bar">
+        <div>
+          <div style="font-size:11px; color:var(--muted); font-weight:700; margin-bottom:2px;">SCORE</div>
+          <div class="score-num" id="score-display">0</div>
+        </div>
+        <div id="mode-area">
+          <div class="mode-badge" id="mode-badge">🎨 Free Decorate</div>
+        </div>
+        <div id="timer-area" style="display:none;">
+          <div style="font-size:11px; color:var(--muted); font-weight:700; margin-bottom:2px; text-align:right;">TIME</div>
+          <div id="timer-display">60</div>
+        </div>
+      </div>
+    </div>
+ 
+    <!-- Toppings -->
+    <div class="panel-card">
+      <div class="panel-title">Toppings</div>
+      <div class="toppings-grid" id="toppings-grid">
+        <!-- injected by JS -->
+      </div>
+    </div>
+ 
+    <!-- AI Feedback -->
+    <div class="panel-card">
+      <div class="panel-title">Chef AI says…</div>
+      <div id="feedback-box">Start decorating your pizza to get feedback!</div>
+    </div>
+ 
+    <!-- Controls -->
+    <div class="panel-card">
+      <div class="panel-title">Controls</div>
+      <div class="controls">
+        <button class="btn btn-secondary" onclick="clearPizza()">🗑 Clear</button>
+        <button class="btn btn-secondary" onclick="undoLast()">↩ Undo</button>
+        <button class="btn btn-green" onclick="submitPizza()">✅ Submit</button>
+      </div>
+      <div style="margin-top: 10px;">
+        <div class="panel-title" style="margin-bottom:6px;">Mode</div>
+        <div class="controls">
+          <button class="btn btn-secondary" onclick="setMode('free')" id="btn-free">🎨 Free</button>
+          <button class="btn btn-secondary" onclick="setMode('timer')" id="btn-timer">⏱ Timer</button>
+        </div>
+      </div>
+    </div>
+ 
+  </div>
+</div>
+ 
+<!-- Result overlay -->
+<div class="overlay hidden" id="result-overlay">
+  <div class="overlay-card">
+    <h2 id="overlay-title">Pizza Ready!</h2>
+    <div class="star-row" id="overlay-stars">⭐⭐⭐</div>
+    <div class="overlay-score" id="overlay-score">0 pts</div>
+    <p id="overlay-feedback">Your pizza looks amazing!</p>
+    <button class="btn btn-primary" style="width:100%; margin-bottom:8px;" onclick="newPizza()">🍕 New Pizza</button>
+    <button class="btn btn-secondary" style="width:100%;" onclick="closeOverlay()">Keep editing</button>
+  </div>
+</div>
+ 
+<script>
+const TOPPINGS = [
+  { id: 'pepperoni', emoji: '🔴', label: 'Pepperoni', pts: 10 },
+  { id: 'mushroom',  emoji: '🍄', label: 'Mushroom',  pts: 8  },
+  { id: 'olive',     emoji: '🫒', label: 'Olive',     pts: 8  },
+  { id: 'pepper',    emoji: '🫑', label: 'Pepper',    pts: 7  },
+  { id: 'basil',     emoji: '🌿', label: 'Basil',     pts: 9  },
+  { id: 'pineapple', emoji: '🍍', label: 'Pineapple', pts: 12 },
+  { id: 'jalapeño',  emoji: '🌶️', label: 'Jalapeño', pts: 11 },
+  { id: 'anchovy',   emoji: '🐟', label: 'Anchovy',   pts: 10 },
+  { id: 'prosciutto',emoji: '🥩', label: 'Ham',       pts: 10 },
+];
+ 
+let placed = [];
+let score = 0;
+let dragTopping = null;
+let mode = 'free';
+let timerInterval = null;
+let timeLeft = 60;
+ 
+// Build topping panel
+const grid = document.getElementById('toppings-grid');
+TOPPINGS.forEach(t => {
+  const btn = document.createElement('div');
+  btn.className = 'topping-btn';
+  btn.draggable = true;
+  btn.dataset.id = t.id;
+  btn.innerHTML = `<span class="emoji">${t.emoji}</span><span>${t.label}</span>`;
+  btn.addEventListener('dragstart', e => {
+    dragTopping = t;
+    btn.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  btn.addEventListener('dragend', () => btn.classList.remove('dragging'));
+  // Touch support
+  btn.addEventListener('touchstart', handleTouchStart, { passive: true });
+  grid.appendChild(btn);
+});
+ 
+// Pizza drop zone
+const canvas = document.getElementById('pizza-canvas');
+const pizzaWrap = document.getElementById('pizza-wrap');
+ 
+canvas.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+canvas.addEventListener('drop', e => {
+  e.preventDefault();
+  if (!dragTopping) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (isOnPizza(x, y)) placeToppingAt(dragTopping, x, y);
+  dragTopping = null;
+});
+ 
+function isOnPizza(x, y) {
+  const cx = 160, cy = 160, r = 128;
+  return Math.hypot(x - cx, y - cy) <= r;
+}
+ 
+function placeToppingAt(t, x, y) {
+  const el = document.createElement('div');
+  el.className = 'placed-topping';
+  el.textContent = t.emoji;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  canvas.appendChild(el);
+  placed.push({ t, x, y, el });
+  addScore(t.pts);
+  document.getElementById('drop-hint').classList.add('hidden');
+  if (placed.length % 3 === 0) quickFeedback();
+}
+ 
+function addScore(pts) {
+  score += pts;
+  document.getElementById('score-display').textContent = score;
+  const num = document.getElementById('score-display');
+  num.style.transform = 'scale(1.3)';
+  setTimeout(() => num.style.transform = '', 200);
+}
+ 
+function clearPizza() {
+  placed.forEach(p => p.el.remove());
+  placed = [];
+  score = 0;
+  document.getElementById('score-display').textContent = 0;
+  document.getElementById('feedback-box').textContent = 'Start decorating your pizza to get feedback!';
+  document.getElementById('drop-hint').classList.remove('hidden');
+}
+ 
+function undoLast() {
+  if (!placed.length) return;
+  const last = placed.pop();
+  score = Math.max(0, score - last.t.pts);
+  document.getElementById('score-display').textContent = score;
+  last.el.remove();
+}
+ 
+function setMode(m) {
+  mode = m;
+  clearInterval(timerInterval);
+  const timerArea = document.getElementById('timer-area');
+  if (m === 'free') {
+    document.getElementById('mode-badge').textContent = '🎨 Free Decorate';
+    timerArea.style.display = 'none';
+    document.getElementById('btn-free').className = 'btn btn-primary';
+    document.getElementById('btn-timer').className = 'btn btn-secondary';
+  } else {
+    document.getElementById('mode-badge').textContent = '⏱ Beat the Clock';
+    timerArea.style.display = 'block';
+    document.getElementById('btn-free').className = 'btn btn-secondary';
+    document.getElementById('btn-timer').className = 'btn btn-primary';
+    clearPizza();
+    timeLeft = 60;
+    document.getElementById('timer-display').textContent = timeLeft;
+    document.getElementById('timer-display').classList.remove('urgent');
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      document.getElementById('timer-display').textContent = timeLeft;
+      if (timeLeft <= 10) document.getElementById('timer-display').classList.add('urgent');
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        submitPizza(true);
+      }
+    }, 1000);
+  }
+}
+ 
+// AI feedback via Claude API
+async function quickFeedback() {
+  const counts = {};
+  placed.forEach(p => counts[p.t.label] = (counts[p.t.label] || 0) + 1);
+  const desc = Object.entries(counts).map(([k,v]) => `${v}x ${k}`).join(', ');
+  const box = document.getElementById('feedback-box');
+  box.innerHTML = '<span class="loading-dots">Chef AI is tasting</span>';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: `You're a fun pizza game chef character. A player just placed these toppings on their pizza so far: ${desc}. Give a SHORT (1-2 sentence) playful reaction as Chef AI. Be encouraging and a little quirky. No bullet points.`
+        }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.map(b => b.text || '').join('') || 'Looks tasty!';
+    box.textContent = text;
+  } catch {
+    box.textContent = 'Looking good so far! Keep adding toppings! 🍕';
+  }
+}
+ 
+async function submitPizza(auto = false) {
+  clearInterval(timerInterval);
+  const counts = {};
+  placed.forEach(p => counts[p.t.label] = (counts[p.t.label] || 0) + 1);
+  if (!Object.keys(counts).length) {
+    document.getElementById('feedback-box').textContent = 'Add some toppings first!';
+    return;
+  }
+  const desc = Object.entries(counts).map(([k,v]) => `${v}x ${k}`).join(', ');
+  const stars = score >= 80 ? 3 : score >= 40 ? 2 : 1;
+  const starStr = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+ 
+  document.getElementById('overlay-stars').textContent = starStr;
+  document.getElementById('overlay-score').textContent = score + ' pts';
+  document.getElementById('overlay-feedback').textContent = 'Evaluating your masterpiece…';
+  document.getElementById('overlay-title').textContent = auto ? '⏱ Time\'s Up!' : '🍕 Pizza Ready!';
+  document.getElementById('result-overlay').classList.remove('hidden');
+ 
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 150,
+        messages: [{
+          role: 'user',
+          content: `You are Chef AI in a fun pizza game. The player finished their pizza with: ${desc}. Score: ${score} points, ${stars}/3 stars. Write a fun 2-3 sentence verdict: comment on the topping combo, any bold choices (pineapple? anchovies?), and give a made-up Italian pizza name for their creation. Be playful and specific.`
+        }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.map(b => b.text || '').join('') || 'Magnifico! A true pizza masterpiece!';
+    document.getElementById('overlay-feedback').textContent = text;
+  } catch {
+    document.getElementById('overlay-feedback').textContent = 'Magnifico! A true pizza masterpiece!';
+  }
+}
+ 
+function newPizza() {
+  closeOverlay();
+  clearPizza();
+  if (mode === 'timer') setMode('timer');
+}
+ 
+function closeOverlay() {
+  document.getElementById('result-overlay').classList.add('hidden');
+}
+ 
+// Touch drag support
+let touchGhost = null;
+let touchTopping = null;
+ 
+function handleTouchStart(e) {
+  const btn = e.currentTarget;
+  touchTopping = TOPPINGS.find(t => t.id === btn.dataset.id);
+  touchGhost = document.createElement('div');
+  touchGhost.textContent = touchTopping.emoji;
+  touchGhost.style.cssText = 'position:fixed;font-size:30px;pointer-events:none;z-index:999;transform:translate(-50%,-50%);';
+  document.body.appendChild(touchGhost);
+  document.addEventListener('touchmove', handleTouchMove, { passive: false });
+  document.addEventListener('touchend', handleTouchEnd);
+}
+ 
+function handleTouchMove(e) {
+  e.preventDefault();
+  const t = e.touches[0];
+  if (touchGhost) {
+    touchGhost.style.left = t.clientX + 'px';
+    touchGhost.style.top = t.clientY + 'px';
+  }
+}
+ 
+function handleTouchEnd(e) {
+  document.removeEventListener('touchmove', handleTouchMove);
+  document.removeEventListener('touchend', handleTouchEnd);
+  if (touchGhost) { touchGhost.remove(); touchGhost = null; }
+  if (!touchTopping) return;
+  const t = e.changedTouches[0];
+  const rect = canvas.getBoundingClientRect();
+  const x = t.clientX - rect.left;
+  const y = t.clientY - rect.top;
+  if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height && isOnPizza(x, y)) {
+    placeToppingAt(touchTopping, x, y);
+  }
+  touchTopping = null;
+}
+</script>
+</body>
+</html>
+ 
